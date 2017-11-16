@@ -1,27 +1,33 @@
+
 # Table of Contents
 
-1.  [A Continuous Relaxation of Beam Search for End-to-end Training of Neural Sequence Models](#org268303c):beam:search:seq2seq:NER:tagging:
-    1.  [Problem](#org0f7a515)
-        1.  [model not optimized for beam search decoding](#org20ae4d6)
-        2.  [sometimes beam search worse than greedy search](#orgb0c50ef)
-    2.  [Datasets](#orgbebaa5a)
-        1.  [CONLL 2003 shared task data for German language](#org3635c43)
-        2.  [CCG Supertagging Bank](#org9af5110)
-    3.  [Model](#org417823f)
-        1.  [architecture](#org5b95291)
-        2.  [training](#org58b1c42)
-        3.  [decoding](#org16ddd24)
-    4.  [Related Work](#org5040f88)
-        1.  [reinforcement learning](#org407fdb9)
-        2.  [imitation learning](#org8d928d8)
-        3.  [discrete search based methods](#org35c4bed)
-        4.  [continuous approximation of greedy decoding for scheduled sampling objective](#orgf95fc61)
-    5.  [Experiments](#org268d040)
-        1.  [Baselines](#orgaf2343e)
-        2.  [Results](#org35f346b)
+1.  [A Continuous Relaxation of Beam Search for End-to-end Training of Neural Sequence Models](#org20b9c85):beam:search:seq2seq:NER:tagging:
+    1.  [Problem](#orgeab0a30)
+        1.  [models are not optimized for beam search decoding](#org418fb7b)
+        2.  [sometimes beam search is worse than greedy search](#org41dfe31)
+    2.  [Datasets](#orged92542)
+        1.  [CONLL 2003 shared task data for German language](#org9b4fef9)
+        2.  [CCG Supertagging Bank](#org3570b71)
+    3.  [Model](#org42b5876)
+        1.  [seq2seq with fixed attention](#orge5d0fbd)
+        2.  [use decomposable Hamming loss at each timestep](#orgd2e0cc7)
+        3.  [continuous approximation of beam search procedure](#org09568af)
+        4.  [annealing of the softmax temperature](#orgf530f16)
+        5.  [hyperparameters are chosen after 50 epochs with multiple random starts](#org8ed1033)
+        6.  [pretrain with cross-entropy](#orgd1e7210)
+        7.  [decode using soft beam search with hard attention](#org12d837a)
+    4.  [Related Work](#orgd25b609)
+        1.  [reinforcement learning](#org0b5ef8a)
+        2.  [imitation learning](#orgf76be33)
+        3.  [discrete search based methods](#orgc28a4d4)
+        4.  [continuous approximation of greedy decoding for scheduled sampling objective](#orgf4de5ec)
+    5.  [Experiments](#orgb544808)
+        1.  [baseline is a cross-entropy trained seq2seq model](#org39072fc)
+        2.  [56 F1 score (+1.5) on NER](#org6831da7)
+        3.  [85 (+5.5) on supertagging](#org4e142de)
 
 
-<a id="org268303c"></a>
+<a id="org20b9c85"></a>
 
 # A Continuous Relaxation of Beam Search for End-to-end Training of Neural Sequence Models     :beam:search:seq2seq:NER:tagging:
 
@@ -29,48 +35,46 @@
 <https://arxiv.org/abs/1708.00111>
 
 
-<a id="org0f7a515"></a>
+<a id="orgeab0a30"></a>
 
 ## Problem
 
 
-<a id="org20ae4d6"></a>
+<a id="org418fb7b"></a>
 
-### model not optimized for beam search decoding
+### models are not optimized for beam search decoding
 
-1.  beam search not continuous
+1.  beam search is not continuous
 
     1.  discrete argmax decisions
     
     2.  discrete input
 
 
-<a id="orgb0c50ef"></a>
+<a id="org41dfe31"></a>
 
-### sometimes beam search worse than greedy search
+### sometimes beam search is worse than greedy search
 
 1.  when using BLEU
 
 
-<a id="orgbebaa5a"></a>
+<a id="orged92542"></a>
 
 ## Datasets
 
 
-<a id="org3635c43"></a>
+<a id="org9b4fef9"></a>
 
 ### CONLL 2003 shared task data for German language
 
-1.  provided data splits
+1.  used provided data splits
 
 2.  no preprocessing
 
-3.  10 labels
-
-    1.  sentences biased towards containing no entity
+3.  10 biased labels towards no entity label
 
 
-<a id="org9af5110"></a>
+<a id="org3570b71"></a>
 
 ### CCG Supertagging Bank
 
@@ -80,135 +84,108 @@
 
 3.  minor preprocessing
 
-4.  1284 labels
-
-    1.  long tail
-    
-    2.  correlated
+4.  1284 long-tailed and correlated labels
 
 
-<a id="org417823f"></a>
+<a id="org42b5876"></a>
 
 ## Model
 
 
-<a id="org5b95291"></a>
+<a id="orge5d0fbd"></a>
 
-### architecture
+### seq2seq with fixed attention
 
-1.  seq2seq with fixed attention
+1.  64/512 bidirectional LSTM encoder with tanh activation and 8/512 dim embeddings
 
-    1.  encoder
+2.  attend i-th input at i-th decoding step
+
+3.  64/512 LSTM decoder with tan activation
+
+
+<a id="orgd2e0cc7"></a>
+
+### use decomposable Hamming loss at each timestep
+
+1.  fraction of labels incorrectly predicted
+
+
+<a id="org09568af"></a>
+
+### continuous approximation of beam search procedure
+
+1.  temperature controlled softmax approximates argmax
+
+2.  top-k-argmax are represented as matrices
+
+    1.  square distance of all scores from i-th argmax
     
-        1.  embeddings
-        
-            1.  8/512
-        
-        2.  bidirectional LSTM with tanh activation
-        
-            1.  64/512
-    
-    2.  attention
-    
-        1.  attend i-th input at i-th decoding step
-    
-    3.  decoder
-    
-        1.  LSTM with tan activation
-        
-            1.  64/512
+    2.  peaked softmax over negative square distance of all matrix entries
+
+3.  summation over vocabulary dimension gives k soft-attention scores for predecessors
 
 
-<a id="org58b1c42"></a>
+<a id="orgf530f16"></a>
 
-### training
-
-1.  Hamming loss
-
-    1.  fraction of labels incorrectly predicted
-    
-        1.  calculate every timestep
-    
-    2.  discontinuous
-
-2.  alternative Hinge loss
-
-3.  continuous approximation of beam search procedure
-
-    1.  temperature controlled softmax approximates argmax
-    
-        1.  peaked-softmax
-    
-    2.  top-k-argmax representation matrices
-    
-        1.  square distance of all scores from i-th argmax
-        
-        2.  peaked softmax over negative square distance of all matrix entries
-    
-    3.  previous beam identification
-    
-        1.  summation over vocabulary dimension gives k soft-attention scores for predecessors
-
-4.  annealing of the softmax temperature
-
-5.  hyperparameter tuning
-
-    1.  pick best after 50 epochs
-    
-        1.  multiple random starts
-    
-    2.  pretrain with cross-entropy
+### annealing of the softmax temperature
 
 
-<a id="org16ddd24"></a>
+<a id="org8ed1033"></a>
 
-### decoding
-
-1.  soft beam search with hard attention
+### hyperparameters are chosen after 50 epochs with multiple random starts
 
 
-<a id="org5040f88"></a>
+<a id="orgd1e7210"></a>
+
+### pretrain with cross-entropy
+
+
+<a id="org12d837a"></a>
+
+### decode using soft beam search with hard attention
+
+
+<a id="orgd25b609"></a>
 
 ## Related Work
 
 
-<a id="org407fdb9"></a>
+<a id="org0b5ef8a"></a>
 
 ### reinforcement learning
 
 
-<a id="org8d928d8"></a>
+<a id="orgf76be33"></a>
 
 ### imitation learning
 
 
-<a id="org35c4bed"></a>
+<a id="orgc28a4d4"></a>
 
 ### discrete search based methods
 
 
-<a id="orgf95fc61"></a>
+<a id="orgf4de5ec"></a>
 
 ### continuous approximation of greedy decoding for scheduled sampling objective
 
 
-<a id="org268d040"></a>
+<a id="orgb544808"></a>
 
 ## Experiments
 
 
-<a id="orgaf2343e"></a>
+<a id="org39072fc"></a>
 
-### Baselines
-
-1.  cross-entropy trained seq2seq
+### baseline is a cross-entropy trained seq2seq model
 
 
-<a id="org35f346b"></a>
+<a id="org6831da7"></a>
 
-### Results
+### 56 F1 score (+1.5) on NER
 
-1.  56 F1 score (+1.5) on NER
 
-2.  85 (+5.5) on supertagging
+<a id="org4e142de"></a>
+
+### 85 (+5.5) on supertagging
 
